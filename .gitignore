@@ -1,8 +1,28 @@
+# Dependencies
 node_modules/
-build/
+.pnpm-store/
+
+# Production Build
 dist/
-coverage/
-.DS_Store
-*.log
-.env*
+build/
+out/
+
+# Environment variables and secrets
+.env
+.env.*
 !.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Agentic / AI Cache
+.gemini/

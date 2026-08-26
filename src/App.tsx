@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppScreen, UserProfile } from './types';
+import { AuthProvider } from './auth/AuthProvider';
+import { useAuth } from './auth/useAuth';
+import { ProtectedRoute } from './auth/ProtectedRoute';
+import { AuthLoadingState } from './auth/AuthLoadingState';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { LoginView } from './components/LoginView';
@@ -12,48 +16,48 @@ import { FlutterCodeModal } from './components/FlutterCodeModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Heart, 
-  ShieldCheck, 
   ArrowLeft
 } from 'lucide-react';
 import { triggerHapticFeedback } from './utils/haptics';
 
-export function App() {
-  const [currentScreen, setCurrentScreen] = useState<AppScreen>('dashboard');
+function MainApp() {
+  const { user, logout, updateUser, isLoading } = useAuth();
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>('login');
   const [isFlutterModalOpen, setIsFlutterModalOpen] = useState<boolean>(false);
-  const [user, setUser] = useState<UserProfile>({
-    name: 'Ananya Sharma',
-    email: 'ananya.sharma@example.com',
-    phone: '+91 98765 43210',
-    age: 26,
-    stage: 'pregnancy_prenatal',
-    faceAuthEnabled: true,
-    isAuthenticated: true,
-    pregnancyWeek: 24,
-    emergencyContactName: 'Dr. Priya Sharma (Sister / OB-GYN)',
-    emergencyContactPhone: '+91 98111 22233',
-    location: 'Bengaluru, Karnataka',
-  });
+
+  // Enforce protected screen navigation & initial route sync
+  useEffect(() => {
+    if (!isLoading) {
+      if (!user.isAuthenticated && currentScreen !== 'login') {
+        setCurrentScreen('login');
+      } else if (user.isAuthenticated && currentScreen === 'login') {
+        setCurrentScreen('dashboard');
+      }
+    }
+  }, [user.isAuthenticated, isLoading, currentScreen]);
 
   const handleUpdateUser = (updated: Partial<UserProfile>) => {
-    setUser((prev) => ({ ...prev, ...updated }));
+    updateUser(updated);
   };
 
   const handleLoginSuccess = (loginData: Partial<UserProfile>) => {
-    setUser((prev) => ({
-      ...prev,
-      ...loginData,
-      isAuthenticated: true,
-    }));
+    updateUser(loginData);
     setCurrentScreen('dashboard');
   };
 
-  const handleLogout = () => {
-    setUser((prev) => ({
-      ...prev,
-      isAuthenticated: false,
-    }));
-    setCurrentScreen('login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setCurrentScreen('login');
+    }
   };
+
+  if (isLoading) {
+    return <AuthLoadingState />;
+  }
 
   const primaryScreens: AppScreen[] = [
     'dashboard',
@@ -90,7 +94,7 @@ export function App() {
       {/* Main Application Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 md:px-6 py-3 md:py-6 pb-20 md:pb-6 overflow-hidden">
         
-        {/* Clean Back Button Header (Technical module labels removed) */}
+        {/* Clean Back Button Header */}
         {currentScreen !== 'dashboard' && currentScreen !== 'login' && currentScreen !== 'profile' && (
           <motion.div
             initial={{ opacity: 0, y: -6 }}
@@ -128,44 +132,49 @@ export function App() {
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="touch-pan-y"
           >
-            {currentScreen === 'dashboard' && (
-              <DashboardView user={user} onNavigate={setCurrentScreen} />
-            )}
-
             {currentScreen === 'login' && (
               <LoginView
                 onLoginSuccess={handleLoginSuccess}
-                onContinueAsGuest={() => setCurrentScreen('dashboard')}
               />
             )}
 
-            {currentScreen === 'profile' && (
-              <ProfileView
-                user={user}
-                onUpdateUser={handleUpdateUser}
-                onNavigate={setCurrentScreen}
-                onOpenFlutterCode={() => setIsFlutterModalOpen(true)}
-              />
-            )}
+            {currentScreen !== 'login' && (
+              <ProtectedRoute
+                onLoginSuccess={() => setCurrentScreen('dashboard')}
+              >
+                {currentScreen === 'dashboard' && (
+                  <DashboardView user={user} onNavigate={setCurrentScreen} />
+                )}
 
-            {currentScreen === 'puberty' && (
-              <PubertyView fontSizeClass="text-base" highContrast={false} />
-            )}
+                {currentScreen === 'profile' && (
+                  <ProfileView
+                    user={user}
+                    onUpdateUser={handleUpdateUser}
+                    onNavigate={setCurrentScreen}
+                    onOpenFlutterCode={() => setIsFlutterModalOpen(true)}
+                  />
+                )}
 
-            {(currentScreen === 'pregnancy_prenatal' || currentScreen === 'pregnancy_postnatal') && (
-              <PregnancyView
-                initialSubStage={currentScreen === 'pregnancy_postnatal' ? 'postnatal' : 'prenatal'}
-                fontSizeClass="text-base"
-                highContrast={false}
-              />
-            )}
+                {currentScreen === 'puberty' && (
+                  <PubertyView fontSizeClass="text-base" highContrast={false} />
+                )}
 
-            {currentScreen === 'virtual_mother' && (
-              <VirtualMomView fontSizeClass="text-base" highContrast={false} />
-            )}
+                {(currentScreen === 'pregnancy_prenatal' || currentScreen === 'pregnancy_postnatal') && (
+                  <PregnancyView
+                    initialSubStage={currentScreen === 'pregnancy_postnatal' ? 'postnatal' : 'prenatal'}
+                    fontSizeClass="text-base"
+                    highContrast={false}
+                  />
+                )}
 
-            {currentScreen === 'husband_dashboard' && (
-              <HusbandDashboardView fontSizeClass="text-base" highContrast={false} />
+                {currentScreen === 'virtual_mother' && (
+                  <VirtualMomView fontSizeClass="text-base" highContrast={false} />
+                )}
+
+                {currentScreen === 'husband_dashboard' && (
+                  <HusbandDashboardView fontSizeClass="text-base" highContrast={false} />
+                )}
+              </ProtectedRoute>
             )}
           </motion.div>
         </AnimatePresence>
@@ -206,6 +215,14 @@ export function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }
 
