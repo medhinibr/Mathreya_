@@ -10,6 +10,8 @@
  * 3. Successful native biometric verification unlocks the securely persisted Appwrite session token.
  */
 
+import { loginWithPasskey } from '../lib/appwrite';
+
 export interface BiometricCheckResult {
   available: boolean;
   biometricType: 'face_id' | 'fingerprint' | 'passkey' | 'none';
@@ -142,9 +144,13 @@ export async function triggerBiometricAuth(): Promise<BiometricAuthResult> {
 
   // Case B: Web Browser Passkey / WebAuthn
   if (capability.biometricType === 'passkey') {
+    const res = await loginWithPasskey();
+    if (res.success) {
+      return { success: true, isNativeShell: false };
+    }
     return {
       success: false,
-      error: 'Passkey sign-in requires an existing registered WebAuthn credential for your Appwrite account. Please use Email & Password or Email OTP on web.',
+      error: res.error || 'Passkey authentication was cancelled or failed.',
       isNativeShell: false,
     };
   }
@@ -152,7 +158,7 @@ export async function triggerBiometricAuth(): Promise<BiometricAuthResult> {
   // Case C: Web Browser without mobile shell wrapper
   return {
     success: false,
-    error: 'Native Face ID & Biometric Quick Login is active when running inside the Mathreya Mobile App. On web browsers, please sign in with Email & Password or Email OTP.',
+    error: 'Passkey or hardware biometric capability is not enabled on this device.',
     isNativeShell: false,
   };
 }

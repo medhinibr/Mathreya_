@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { User, Shield, Heart, Smartphone, Phone, Mail, MapPin, CheckCircle2, Lock, FileCode, ArrowLeft } from 'lucide-react';
+import { User, Shield, Heart, Smartphone, Phone, Mail, MapPin, CheckCircle2, Lock, FileCode, ArrowLeft, KeyRound, Trash2, Plus, AlertCircle, Fingerprint } from 'lucide-react';
 import { UserProfile, AppScreen } from '../types';
+import { useAuth } from '../auth/useAuth';
 
 interface ProfileViewProps {
   user: UserProfile;
@@ -15,6 +16,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onNavigate,
   onOpenFlutterCode,
 }) => {
+  const { registerPasskey, passkeys, deletePasskey } = useAuth();
+
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email || 'ananya.sharma@example.com');
   const [phone, setPhone] = useState(user.phone || '+91 98765 43210');
@@ -23,6 +26,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [location, setLocation] = useState(user.location || 'Bengaluru, Karnataka');
   const [faceAuth, setFaceAuth] = useState(user.faceAuthEnabled);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Passkey UI state
+  const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
+  const [passkeyMsg, setPasskeyMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [customPasskeyName, setCustomPasskeyName] = useState('');
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +45,46 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const handleRegisterPasskey = async () => {
+    try {
+      setIsRegisteringPasskey(true);
+      setPasskeyMsg(null);
+      const res = await registerPasskey(customPasskeyName.trim() || undefined);
+      if (res.success) {
+        setPasskeyMsg({
+          type: 'success',
+          text: `Device passkey "${res.passkey?.name || 'Device Passkey'}" registered successfully!`,
+        });
+        setCustomPasskeyName('');
+      } else {
+        setPasskeyMsg({
+          type: 'error',
+          text: res.error || 'Failed to register device passkey.',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPasskeyMsg({ type: 'error', text: msg });
+    } finally {
+      setIsRegisteringPasskey(false);
+    }
+  };
+
+  const handleDeletePasskey = async (id: string) => {
+    try {
+      setPasskeyMsg(null);
+      const success = await deletePasskey(id);
+      if (success) {
+        setPasskeyMsg({ type: 'success', text: 'Passkey removed from your account.' });
+      } else {
+        setPasskeyMsg({ type: 'error', text: 'Failed to remove passkey.' });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPasskeyMsg({ type: 'error', text: msg });
+    }
   };
 
   return (
@@ -155,10 +203,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
         {/* Security & Emergency Contacts */}
         <div className="space-y-6">
-          {/* Security & Biometrics */}
+          {/* Security & Biometrics / Passkeys */}
           <div className="bg-white rounded-3xl border border-[#F0E8DD] p-6 space-y-4 shadow-xs">
             <h3 className="text-sm font-bold text-[#5E2211] font-serif flex items-center gap-2 border-b border-[#FAF6F0] pb-3">
-              <Lock className="w-4 h-4 text-[#C85A32]" /> Biometric Safe Space Security
+              <Lock className="w-4 h-4 text-[#C85A32]" /> Biometric Safe Space & Passkeys
             </h3>
 
             <div className="flex items-center justify-between bg-[#FCFAF7] p-4 rounded-2xl border border-[#EAE0D2]">
@@ -174,6 +222,94 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 onChange={(e) => setFaceAuth(e.target.checked)}
                 className="w-5 h-5 accent-[#C85A32] rounded cursor-pointer"
               />
+            </div>
+
+            {/* Passkey Setup Section */}
+            <div className="pt-2 border-t border-[#F7EAE2] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-[#C85A32]" />
+                  <span className="text-xs font-bold text-[#5E2211]">Registered Device Passkeys</span>
+                </div>
+                <span className="text-[10px] bg-[#FFF5ED] text-[#8B3012] border border-[#F4D9CC] px-2.5 py-0.5 rounded-full font-bold">
+                  {passkeys.length} Active
+                </span>
+              </div>
+
+              {passkeyMsg && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
+                    passkeyMsg.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {passkeyMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  )}
+                  <span>{passkeyMsg.text}</span>
+                </div>
+              )}
+
+              {/* List of Registered Passkeys */}
+              {passkeys.length > 0 ? (
+                <div className="space-y-2">
+                  {passkeys.map((pk) => (
+                    <div
+                      key={pk.id}
+                      className="flex items-center justify-between bg-[#FCFAF7] p-3 rounded-xl border border-[#EAE0D2] text-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Fingerprint className="w-4 h-4 text-[#C85A32]" />
+                        <div>
+                          <p className="font-bold text-[#4D2D22]">{pk.name}</p>
+                          <p className="text-[10px] text-stone-400">
+                            Added: {new Date(pk.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePasskey(pk.id)}
+                        className="text-stone-400 hover:text-rose-600 p-1.5 transition rounded-lg hover:bg-rose-50 cursor-pointer"
+                        title="Remove passkey"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-stone-500 italic bg-[#FCFAF7] p-3 rounded-xl border border-[#EAE0D2]">
+                  No device passkeys registered yet. Add a passkey to quickly sign in with Face ID, Fingerprint, or Device PIN.
+                </p>
+              )}
+
+              {/* Add Passkey Action */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder="Device Name (e.g. MacBook Pro, iPhone)"
+                  value={customPasskeyName}
+                  onChange={(e) => setCustomPasskeyName(e.target.value)}
+                  className="flex-1 px-3 py-2 text-xs rounded-xl bg-[#FCFAF7] border border-[#EAE0D2] text-[#3D251E] focus:outline-none focus:border-[#C85A32]"
+                />
+                <button
+                  type="button"
+                  onClick={handleRegisterPasskey}
+                  disabled={isRegisteringPasskey}
+                  className="bg-[#FFF5ED] hover:bg-[#FCEEE6] text-[#8B3012] border border-[#F4D9CC] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  {isRegisteringPasskey ? (
+                    <span className="inline-block w-3.5 h-3.5 border-2 border-[#C85A32] border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5 text-[#C85A32]" />
+                  )}
+                  <span>{isRegisteringPasskey ? 'Verifying...' : 'Add Passkey'}</span>
+                </button>
+              </div>
             </div>
           </div>
 

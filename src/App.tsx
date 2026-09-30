@@ -67,7 +67,7 @@ function MainApp() {
     'husband_dashboard'
   ];
 
-  const handleSwipeEnd = (_: any, info: { offset: { x: number }; velocity: { x: number } }) => {
+  const handleSwipeEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
     const swipeThreshold = 60;
     const currentIndex = primaryScreens.indexOf(currentScreen);
     if (currentIndex === -1) return;

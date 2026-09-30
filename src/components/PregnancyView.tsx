@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { JournalEntry, MediaItem, CommunityPost } from '../types';
-import { INITIAL_JOURNALS, INITIAL_MEDIA, INITIAL_COMMUNITY_POSTS } from '../data';
-import { 
-  Baby, 
-  Heart, 
-  Lock, 
-  Bot, 
-  PlayCircle, 
-  Users, 
-  CalendarCheck, 
-  Stethoscope, 
-  Share2, 
-  CheckCircle2, 
-  Droplets, 
-  Sparkles, 
+import { INITIAL_MEDIA, INITIAL_COMMUNITY_POSTS } from '../data';
+import {
+  Baby,
+  Heart,
+  Lock,
+  Bot,
+  PlayCircle,
+  Users,
+  CalendarCheck,
+  Stethoscope,
+  Share2,
+  CheckCircle2,
+  Droplets,
+  Sparkles,
   Send,
   ShieldCheck,
   PhoneCall,
@@ -32,6 +32,8 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { triggerHapticFeedback } from '../utils/haptics';
+import { useAuth } from '../auth/useAuth';
+import { getUserJournals, createJournal, createAppointment } from '../lib/appwrite';
 
 interface PregnancyViewProps {
   initialSubStage?: 'prenatal' | 'postnatal';
@@ -44,6 +46,9 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
   fontSizeClass,
   highContrast,
 }) => {
+  const { appwriteUser } = useAuth();
+  const userId = appwriteUser?.$id || '';
+
   // Main Stage Mode: Prenatal vs Postnatal (The 2 Core Pillars)
   const [stageMode, setStageMode] = useState<'prenatal' | 'postnatal'>(initialSubStage);
 
@@ -57,15 +62,15 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
   const [takenItems, setTakenItems] = useState<string[]>(['Folic Acid & Iron']);
 
   // Safe Space Vault State
-  const [journals, setJournals] = useState<JournalEntry[]>(
-    INITIAL_JOURNALS.filter(j => j.category === 'prenatal' || j.category === 'postnatal')
-  );
+  const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
 
   // Doctor Consultation State
   const [selectedDoctor, setSelectedDoctor] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [isBooking, setIsBooking] = useState(false);
+  const [bookingError, setBookingError] = useState('');
 
   // AI Psychiatrist State
   const [psychiatristInput, setPsychiatristInput] = useState('');
@@ -123,19 +128,109 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
     );
   };
 
-  const handleAddJournal = (e: React.FormEvent) => {
+  const handleBookAppointment = async (doc: (typeof doctorsList)[number]) => {
+    if (!userId) {
+      setBookingSuccess(false);
+      setBookingError('Please log in to book an appointment.');
+      return;
+    }
+
+    setIsBooking(true);
+    setBookingSuccess(false);
+    setBookingError('');
+
+    try {
+      const appointmentDate = new Date();
+      if (doc.availability.toLowerCase().startsWith('tomorrow')) {
+        appointmentDate.setDate(appointmentDate.getDate() + 1);
+      }
+
+      const year = appointmentDate.getFullYear();
+      const month = String(appointmentDate.getMonth() + 1).padStart(2, '0');
+      const day = String(appointmentDate.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
+      const timeMatch = doc.availability.match(/at\s+(.+)$/i);
+      const appointmentTime = timeMatch?.[1]?.trim() || doc.availability;
+
+      const appointment = await createAppointment({
+        userId,
+        doctorName: doc.name,
+        hospitalName: doc.hospital,
+        appointmentDate: formattedDate,
+        appointmentTime,
+        appointmentType: stageMode === 'prenatal'
+          ? 'Prenatal Consultation'
+          : 'Postnatal Consultation',
+        status: 'pending',
+        notes: `Booked from Mathreya ${stageMode} consultation.`,
+      });
+
+      if (!appointment) {
+        setBookingError('Unable to book the consultation right now. Please try again.');
+        return;
+      }
+
+      setSelectedDoctor(doc.name);
+      setBookingSuccess(true);
+    } catch (error) {
+      console.error('Appointment booking failed:', error);
+      setBookingError('Unable to book the consultation right now. Please try again.');
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!userId) {
+      setJournals([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadJournals = async () => {
+      try {
+        const dbJournals = await getUserJournals(userId);
+
+        if (!cancelled) {
+          setJournals(
+            dbJournals.filter(
+              j => j.category === 'prenatal' || j.category === 'postnatal'
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Failed to load pregnancy journals:', error);
+
+        if (!cancelled) {
+          setJournals([]);
+        }
+      }
+    };
+
+    void loadJournals();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const handleAddJournal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newContent.trim()) return;
-    const entry: JournalEntry = {
-      id: 'j_' + Date.now(),
+    if (!newTitle.trim() || !newContent.trim() || !userId) return;
+
+    const entry = await createJournal({
+      userId,
       title: newTitle,
       content: newContent,
       date: new Date().toISOString().split('T')[0],
       category: stageMode,
       mood: 'Serene',
       isEncrypted: true,
-    };
-    setJournals([entry, ...journals]);
+    });
+
+    if (!entry) return;
+    setJournals(prev => [entry, ...prev]);
     setNewTitle('');
     setNewContent('');
   };
@@ -211,7 +306,7 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
 
   return (
     <div className={`space-y-6 max-w-full sm:max-w-2xl md:max-w-4xl xl:max-w-6xl mx-auto ${fontSizeClass} text-[#4D2D22] select-none pb-8`}>
-      
+
       {/* 1. TOP HERO STAGE CARDS: PRENATAL & POSTNATAL (The Core 2 Pillars from Architecture) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
@@ -225,7 +320,7 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
 
         {/* Spacious 2-Column Hero Stage Selector Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          
+
           {/* STAGE 1: PRENATAL */}
           <motion.button
             whileHover={{ scale: 1.01 }}
@@ -234,16 +329,14 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
               triggerHapticFeedback('medium');
               setStageMode('prenatal');
             }}
-            className={`p-5 rounded-[32px] text-left border transition-all cursor-pointer space-y-3 relative overflow-hidden ${
-              stageMode === 'prenatal'
+            className={`p-5 rounded-[32px] text-left border transition-all cursor-pointer space-y-3 relative overflow-hidden ${stageMode === 'prenatal'
                 ? 'bg-gradient-to-br from-[#B76A4B] to-[#C87958] text-white shadow-md border-transparent ring-4 ring-[#B76A4B]/20'
                 : 'bg-white text-[#4D2D22] border-[#EADCD1] hover:border-[#B76A4B]/40 shadow-2xs'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
-              <div className={`p-3 rounded-2xl ${
-                stageMode === 'prenatal' ? 'bg-white/20 text-white' : 'bg-[#FFF8F5] text-[#B76A4B]'
-              }`}>
+              <div className={`p-3 rounded-2xl ${stageMode === 'prenatal' ? 'bg-white/20 text-white' : 'bg-[#FFF8F5] text-[#B76A4B]'
+                }`}>
                 <Baby className="w-6 h-6" />
               </div>
               {stageMode === 'prenatal' ? (
@@ -258,14 +351,12 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
             </div>
 
             <div>
-              <h3 className={`text-xl font-serif font-extrabold ${
-                stageMode === 'prenatal' ? 'text-white' : 'text-[#4D2D22]'
-              }`}>
+              <h3 className={`text-xl font-serif font-extrabold ${stageMode === 'prenatal' ? 'text-white' : 'text-[#4D2D22]'
+                }`}>
                 Prenatal Journey
               </h3>
-              <p className={`text-xs font-medium mt-1 leading-relaxed ${
-                stageMode === 'prenatal' ? 'text-white/90' : 'text-[#8B756A]'
-              }`}>
+              <p className={`text-xs font-medium mt-1 leading-relaxed ${stageMode === 'prenatal' ? 'text-white/90' : 'text-[#8B756A]'
+                }`}>
                 Weekly fetal growth tracking, Garbh Sanskar Vedic Shlokas, trimester yoga, & OB-GYN consultations.
               </p>
             </div>
@@ -279,16 +370,14 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
               triggerHapticFeedback('medium');
               setStageMode('postnatal');
             }}
-            className={`p-5 rounded-[32px] text-left border transition-all cursor-pointer space-y-3 relative overflow-hidden ${
-              stageMode === 'postnatal'
+            className={`p-5 rounded-[32px] text-left border transition-all cursor-pointer space-y-3 relative overflow-hidden ${stageMode === 'postnatal'
                 ? 'bg-gradient-to-br from-[#B76A4B] to-[#C87958] text-white shadow-md border-transparent ring-4 ring-[#B76A4B]/20'
                 : 'bg-white text-[#4D2D22] border-[#EADCD1] hover:border-[#B76A4B]/40 shadow-2xs'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
-              <div className={`p-3 rounded-2xl ${
-                stageMode === 'postnatal' ? 'bg-white/20 text-white' : 'bg-[#FFF8F5] text-rose-600'
-              }`}>
+              <div className={`p-3 rounded-2xl ${stageMode === 'postnatal' ? 'bg-white/20 text-white' : 'bg-[#FFF8F5] text-rose-600'
+                }`}>
                 <Heart className="w-6 h-6 fill-current" />
               </div>
               {stageMode === 'postnatal' ? (
@@ -303,14 +392,12 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
             </div>
 
             <div>
-              <h3 className={`text-xl font-serif font-extrabold ${
-                stageMode === 'postnatal' ? 'text-white' : 'text-[#4D2D22]'
-              }`}>
+              <h3 className={`text-xl font-serif font-extrabold ${stageMode === 'postnatal' ? 'text-white' : 'text-[#4D2D22]'
+                }`}>
                 Postnatal Recovery
               </h3>
-              <p className={`text-xs font-medium mt-1 leading-relaxed ${
-                stageMode === 'postnatal' ? 'text-white/90' : 'text-[#8B756A]'
-              }`}>
+              <p className={`text-xs font-medium mt-1 leading-relaxed ${stageMode === 'postnatal' ? 'text-white/90' : 'text-[#8B756A]'
+                }`}>
                 Maternal postpartum physical healing, pelvic floor Kegels, newborn feeding logs, & lactation care.
               </p>
             </div>
@@ -348,16 +435,14 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
                   triggerHapticFeedback('light');
                   setActiveSubTab(mod.id as any);
                 }}
-                className={`p-3.5 sm:p-4 rounded-3xl text-left border transition-all cursor-pointer flex flex-col justify-between space-y-2 relative overflow-hidden ${
-                  isActive
+                className={`p-3.5 sm:p-4 rounded-3xl text-left border transition-all cursor-pointer flex flex-col justify-between space-y-2 relative overflow-hidden ${isActive
                     ? 'bg-[#F7EAE2] border-2 border-[#B76A4B] text-[#B76A4B] shadow-md ring-2 ring-[#B76A4B]/20 scale-102'
                     : 'bg-white border-[#EADCD1] text-[#4D2D22] hover:border-[#B76A4B]/40 shadow-2xs'
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between w-full">
-                  <div className={`p-2 rounded-2xl border transition ${
-                    isActive ? 'bg-[#B76A4B] text-white border-transparent' : 'bg-[#FFF8F5] text-[#B76A4B] border-[#EADCD1]'
-                  }`}>
+                  <div className={`p-2 rounded-2xl border transition ${isActive ? 'bg-[#B76A4B] text-white border-transparent' : 'bg-[#FFF8F5] text-[#B76A4B] border-[#EADCD1]'
+                    }`}>
                     <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
                   {isActive && (
@@ -393,7 +478,7 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
           {/* SUB-TAB 1: BALANCED ROUTINES */}
           {activeSubTab === 'routines' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* Progress & Routine Checklists */}
               <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-[32px] border border-[#EADCD1] shadow-2xs space-y-6">
                 <div className="flex justify-between items-center border-b border-[#EADCD1] pb-4">
@@ -414,7 +499,7 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
                   <h4 className="font-bold text-xs uppercase tracking-wider text-[#8B756A]">
                     {stageMode === 'prenatal' ? 'Daily Garbh Sanskar & Health Actions' : 'Postpartum Recovery Actions'}
                   </h4>
-                  
+
                   <div className="space-y-2.5">
                     {[
                       { name: 'Folic Acid & Iron Supplement', category: 'Medication' },
@@ -427,11 +512,10 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
                         <div
                           key={item.name}
                           onClick={(e) => handleToggleItem(item.name, e)}
-                          className={`p-4 rounded-2xl border cursor-pointer transition flex justify-between items-center ${
-                            done
+                          className={`p-4 rounded-2xl border cursor-pointer transition flex justify-between items-center ${done
                               ? 'bg-[#F7EAE2] border-[#B76A4B] text-[#B76A4B] shadow-2xs'
                               : 'bg-[#FFF8F5] border-[#EADCD1] text-[#4D2D22] hover:bg-[#F7EAE2]'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-3">
                             <CheckCircle2 className={`w-5 h-5 ${done ? 'text-[#B76A4B]' : 'text-stone-300'}`} />
@@ -587,11 +671,10 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
                     className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[80%] p-4 rounded-2xl text-xs leading-relaxed ${
-                        msg.sender === 'user'
+                      className={`max-w-[80%] p-4 rounded-2xl text-xs leading-relaxed ${msg.sender === 'user'
                           ? 'bg-[#B76A4B] text-white font-medium rounded-tr-none'
                           : 'bg-[#FFF8F5] text-[#4D2D22] rounded-tl-none border border-[#EADCD1]'
-                      }`}
+                        }`}
                     >
                       {msg.text}
                     </div>
@@ -623,17 +706,16 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
             <div className="space-y-5">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <h3 className="font-serif font-extrabold text-lg text-[#4D2D22]">Maternity Media Library</h3>
-                
+
                 <div className="flex items-center gap-1.5 bg-white p-1 rounded-2xl border border-[#EADCD1]">
                   {(['all', 'audio', 'video', 'articles'] as const).map((cat) => (
                     <button
                       key={cat}
                       onClick={() => setMediaFilter(cat)}
-                      className={`px-3 py-1 rounded-xl text-xs font-bold capitalize transition cursor-pointer ${
-                        mediaFilter === cat 
-                          ? 'bg-[#B76A4B] text-white shadow-2xs' 
+                      className={`px-3 py-1 rounded-xl text-xs font-bold capitalize transition cursor-pointer ${mediaFilter === cat
+                          ? 'bg-[#B76A4B] text-white shadow-2xs'
                           : 'text-[#8B756A] hover:bg-[#FFF8F5]'
-                      }`}
+                        }`}
                     >
                       {cat}
                     </button>
@@ -672,7 +754,7 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
                         </div>
                       </div>
                     </div>
-                ))}
+                  ))}
               </div>
             </div>
           )}
@@ -690,7 +772,12 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
               {bookingSuccess && (
                 <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  <span>Consultation request sent! Appointment details will arrive via SMS & WhatsApp.</span>
+                  <span>Consultation request saved successfully for {selectedDoctor}.</span>
+                </div>
+              )}
+              {bookingError && (
+                <div className="bg-red-50 border border-red-300 text-red-900 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
+                  <span>{bookingError}</span>
                 </div>
               )}
 
@@ -718,13 +805,11 @@ export const PregnancyView: React.FC<PregnancyViewProps> = ({
                     </div>
 
                     <button
-                      onClick={() => {
-                        setSelectedDoctor(doc.name);
-                        setBookingSuccess(true);
-                      }}
-                      className="w-full py-2.5 bg-[#B76A4B] hover:bg-[#A05A3B] text-white font-extrabold text-xs rounded-2xl transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      onClick={() => void handleBookAppointment(doc)}
+                      disabled={isBooking}
+                      className="w-full py-2.5 bg-[#B76A4B] hover:bg-[#A05A3B] disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-2xl transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <PhoneCall className="w-3.5 h-3.5" /> Book 1-1 Session
+                      <PhoneCall className="w-3.5 h-3.5" /> {isBooking ? 'Booking...' : 'Book 1-1 Session'}
                     </button>
                   </div>
                 ))}

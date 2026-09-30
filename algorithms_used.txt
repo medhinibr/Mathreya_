@@ -1,0 +1,54 @@
+Algorithm Used
+
+1. Menstrual Cycle & Ovulation Prediction Algorithm
+(Naegele's Rule & Calendar Analytics Algorithm)
+> Input: Last Menstrual Period (LMP) date, Average cycle length (e.g. 28 days), Logged symptoms
+> Processing Layers:
+• Cycle Day Calculation: Computes total elapsed days from LMP date to current date
+• Ovulation Prediction: Calculates ovulation day by adding (Cycle Length - 14 days) to LMP date
+• Fertile Window Mapping: Maps fertile window from 5 days prior to ovulation up to 1 day post-ovulation
+• Delivery Date Estimation: Calculates estimated delivery date by adding 280 days (40 weeks) to LMP date
+> Output: Current cycle day, cycle phase, fertile window range, and next period/due date
+
+
+2. Passkey Biometric Authentication Algorithm
+(WebAuthn / FIDO2 ECDSA Cryptographic Challenge-Response Algorithm)
+> Input: Cryptographic random challenge string, Biometric sensor input (Face ID / Fingerprint / PIN)
+> Processing Layers:
+• Challenge Generation: Creates a 32-byte secure random challenge using Web Crypto API
+• Asymmetric Key Generation: Generates public/private keypair using ES256 Elliptic Curve Cryptography in Secure Enclave
+• Biometric Signature Signing: Signs the challenge using hardware-secured private key upon successful biometric verification
+• Cryptographic Verification: Validates signed assertion against stored public key on server
+> Output: Authentication result — Authorized Session or Unauthorized Access
+
+
+3. Virtual Mom AI Recommendation Algorithm
+(Rule-Based Decision Tree Expert System)
+> Input: User context state (Life Stage, Gestational Week, Logged Symptoms, Mood)
+> Processing Layers:
+• Context Data Extraction: Parses active life stage, pregnancy week, and user mood state
+• Red-Flag Rule Evaluation: Evaluates symptoms against emergency obstetric rules (e.g., high BP / preeclampsia alerts)
+• Emotional Support Dispatch: Triggers targeted comforting maternal audio prompts when anxiety is detected
+• Knowledge Filtering: Filters nutrition and wellness guidance matching current gestational week range
+> Output: Contextual health recommendation, maternal guidance prompt, or emergency medical alert
+
+
+4. Idempotent Synchronization & Deduplication Algorithm
+(Read-Check-Update/Create Upsert Algorithm)
+> Input: User ID, Target entry date, Log payload (period data / journal / task)
+> Processing Layers:
+• Pre-Check Retrieval: Queries database for existing records matching user ID and target date
+• Existence Condition Check: Evaluates whether a matching document already exists in the database
+• Selective Execution: Triggers updateDocument() if record exists, or createDocument() if record is new
+• State Normalization: Returns standardized payload to UI preventing duplicate state updates
+> Output: Persisted database record with single-instance guarantee (Zero Duplicates)
+
+
+5. Zero-Trust Access Control Algorithm
+(Document-Level Security & Index Query Filtering Algorithm)
+> Input: Authenticated user ID, Requested database document / collection query
+> Processing Layers:
+• Creation-Time Permission Scoping: Attaches explicit read/update/delete permissions bound exclusively to authenticated user ID
+• Query-Time Filter Enforcement: Applies Query.equal("user_id", userId) constraint to all database operations
+• Server-Side Access Validation: Evaluates incoming request session against document ownership policies
+> Output: Authorized user-owned dataset or Access Denied response

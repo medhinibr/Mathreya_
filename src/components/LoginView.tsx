@@ -665,15 +665,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 )}
               </button>
 
-              {/* Option 2: Face ID / Biometrics */}
+              {/* Option 2: Face ID / Biometrics / Passkey */}
               <button
                 type="button"
                 disabled={isLoading}
                 onClick={handleBiometricLogin}
                 className="py-2.5 px-3 rounded-2xl bg-white border border-[#EADCD1] text-xs font-bold text-[#4D2D22] hover:bg-[#F7EAE2] transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Sign in with device Face ID, Fingerprint, or Passkey"
               >
                 <ScanFace className="w-3.5 h-3.5 text-[#B76A4B]" />
-                <span>Face ID / Quick Login</span>
+                <span>Face ID / Passkey</span>
               </button>
             </div>
           </div>

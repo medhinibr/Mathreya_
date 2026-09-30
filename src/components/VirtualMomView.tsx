@@ -103,7 +103,7 @@ export const VirtualMomView: React.FC<VirtualMomViewProps> = ({ fontSizeClass, h
 
   // Call timer simulation
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (callState !== 'idle') {
       interval = setInterval(() => setCallDuration(prev => prev + 1), 1000);
     } else {

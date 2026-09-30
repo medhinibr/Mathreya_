@@ -1,6 +1,7 @@
 import { createContext } from 'react';
 import { UserProfile } from '../types';
 import { Models } from 'appwrite';
+import { PasskeyEntry } from '../lib/appwrite';
 
 export interface AuthContextType {
   user: UserProfile;
@@ -15,6 +16,10 @@ export interface AuthContextType {
   sendOTP: (email: string) => Promise<Models.Token>;
   verifyOTP: (userId: string, secret: string) => Promise<{ session: Models.Session; user: Models.User<Models.Preferences> | null }>;
   authenticateWithBiometrics: () => Promise<{ success: boolean; error?: string }>;
+  registerPasskey: (deviceName?: string) => Promise<{ success: boolean; passkey?: PasskeyEntry; error?: string }>;
+  loginWithPasskey: () => Promise<{ success: boolean; error?: string }>;
+  passkeys: PasskeyEntry[];
+  deletePasskey: (id: string) => Promise<boolean>;
   isBiometricAvailable: boolean;
   biometricType: 'face_id' | 'fingerprint' | 'passkey' | 'none';
 }

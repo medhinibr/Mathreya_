@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AuthContext } from './AuthContext';
 import { UserProfile } from '../types';
 import {
@@ -10,6 +10,11 @@ import {
   completePasswordReset,
   sendEmailOTP,
   verifyEmailOTP,
+  registerPasskey as appwriteRegisterPasskey,
+  loginWithPasskey as appwriteLoginWithPasskey,
+  getUserPasskeys,
+  deletePasskey as appwriteDeletePasskey,
+  PasskeyEntry,
 } from '../lib/appwrite';
 import {
   checkBiometricAvailability,
@@ -37,11 +42,17 @@ const defaultUserProfile: UserProfile = {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserProfile>(defaultUserProfile);
   const [appwriteUser, setAppwriteUser] = useState<Models.User<Models.Preferences> | null>(null);
+  const [passkeys, setPasskeys] = useState<PasskeyEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Biometric state
   const [isBiometricAvailable, setIsBiometricAvailable] = useState<boolean>(false);
   const [biometricType, setBiometricType] = useState<'face_id' | 'fingerprint' | 'passkey' | 'none'>('none');
+
+  const loadPasskeys = useCallback(async () => {
+    const list = await getUserPasskeys();
+    setPasskeys(list);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -60,12 +71,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             phone: u.phone || '',
             isAuthenticated: true,
           });
+          const list = await getUserPasskeys();
+          if (isMounted) {
+            setPasskeys(list);
+          }
         } else {
           setAppwriteUser(null);
           setUser({
             ...defaultUserProfile,
             isAuthenticated: false,
           });
+          setPasskeys([]);
         }
       } catch (error) {
         console.error('Session check error:', error);
@@ -75,6 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             ...defaultUserProfile,
             isAuthenticated: false,
           });
+          setPasskeys([]);
         }
       } finally {
         if (isMounted) {
@@ -111,6 +128,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         phone: u.phone || prev.phone || '',
         isAuthenticated: true,
       }));
+      await loadPasskeys();
     }
     return { session, user: u };
   };
@@ -135,6 +153,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     await appwriteLogout();
     setAppwriteUser(null);
+    setPasskeys([]);
     setUser({
       ...defaultUserProfile,
       isAuthenticated: false,
@@ -180,8 +199,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         phone: u.phone || prev.phone || '',
         isAuthenticated: true,
       }));
+      await loadPasskeys();
     }
     return { session, user: u };
+  };
+
+  const registerPasskey = async (deviceName?: string) => {
+    const res = await appwriteRegisterPasskey(deviceName);
+    if (res.success) {
+      await loadPasskeys();
+    }
+    return res;
+  };
+
+  const loginWithPasskey = async () => {
+    const res = await appwriteLoginWithPasskey();
+    if (res.success) {
+      const u = await getCurrentUser();
+      if (u) {
+        setAppwriteUser(u);
+        setUser((prev) => ({
+          ...prev,
+          name: u.name || prev.name || 'Mathreya User',
+          email: u.email || '',
+          phone: u.phone || prev.phone || '',
+          isAuthenticated: true,
+        }));
+        await loadPasskeys();
+        return { success: true };
+      }
+    }
+    return { success: false, error: res.error || 'Passkey authentication failed.' };
+  };
+
+  const deletePasskey = async (id: string) => {
+    const success = await appwriteDeletePasskey(id);
+    if (success) {
+      await loadPasskeys();
+    }
+    return success;
   };
 
   const authenticateWithBiometrics = async (): Promise<{ success: boolean; error?: string }> => {
@@ -198,11 +254,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           phone: u.phone || prev.phone || '',
           isAuthenticated: true,
         }));
+        await loadPasskeys();
         return { success: true };
       } else {
         return {
           success: false,
-          error: 'No active session found. Please sign in once with Email & Password or OTP.',
+          error: 'Passkey verified on device, but no active Appwrite session was found. Please sign in with email & password once to sync your passkey.',
         };
       }
     }
@@ -228,6 +285,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         sendOTP,
         verifyOTP,
         authenticateWithBiometrics,
+        registerPasskey,
+        loginWithPasskey,
+        passkeys,
+        deletePasskey,
         isBiometricAvailable,
         biometricType,
       }}
